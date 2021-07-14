@@ -1,0 +1,213 @@
+
+////////////////////////////////////
+////  Alexandre OGER 2014-2105  ////
+///////////////////////////////////
+
+  
+
+  
+
+// un afficheur LCD I2c 2 lignes de 40 caracteres sur bus I2C
+// un  reseau de resistances sur A3
+// RX et TX branchés sur un port serie sans fil
+
+
+/*|
+                                -----------                        
+                          D7   |           | D8
+                          D6   |           | D9
+                          D5   |           | D10
+                          D4   |           | D11
+                          D3   |           | D12
+                          D2   |           | D13
+     RX sans fil ---->    TX   |           | A0
+     TX sans fil ---->    RX   |           | A1
+                               |           | A2
+                               |           | A3        <------reseau de resistances sur BP
+                               |           | A4 (SDA)  <--------I2C pour afficheur LCD
+                               |           | A5 (SCL)  <-----|
+                                -----------
+*/
+
+
+  //appel librairie wire pour la communication I2C avec l'ecran lcd
+  #include <Wire.h>
+
+  //ecran lcd
+  #include <LiquidCrystal_I2C.h>
+  LiquidCrystal_I2C lcd(0x27,40,2);
+  
+  
+  char commandes[41];
+  char bouton_courant;
+  int demarrage=0;
+  int index_courant;
+
+
+void setup() {
+
+        Serial.begin(9600);
+        //demarrage bus I2C
+        delay(400);
+        Wire.begin();
+              
+   
+        lcd.init();
+        lcd.init();
+        delay(400);
+        lcd.backlight();
+        lcd.clear();
+        
+        lcd.setCursor(0, 0);
+        lcd.print(F("OK")); 
+        
+           
+        delay(2000);
+        lcd.clear();
+        
+         pinMode(A3, INPUT_PULLUP);
+}
+
+void loop() {
+  
+         bouton_courant=lit_boutons();
+        
+        analyse_bouton(bouton_courant);
+        delay(700);
+
+ 
+}
+
+
+
+char lit_boutons() {
+  
+   char retour;
+   int nbr;
+   int nbr2;
+   unsigned long cpt_modif=0;
+     
+   
+   while(1){
+       
+       nbr = analogRead(3);
+       delay(50);
+       nbr2 = analogRead(3);
+       
+       if (nbr==nbr2) {
+         
+           if (nbr>125 && 145>nbr){
+             retour='A';
+             break;
+           }
+           
+           if (nbr>104 && 124>nbr){
+             retour='G';
+             break;
+           }
+           
+           if (nbr>76 && 103>nbr){
+             retour='R';
+             break;
+           }
+           
+           if (nbr>56 && 75>nbr){
+             retour='D';
+             break;
+           }
+           
+           if (nbr>25 && 55>nbr){
+             retour='Z';
+             break;
+           }
+           
+           if (24>nbr){
+             retour='X';
+             break;
+           }
+       
+       }
+       
+       
+      
+   } 
+
+
+   return retour;
+}
+
+
+
+void analyse_bouton(char bouton) {
+  
+   int sortie=0;
+   int index=0;
+   char avancee; 
+
+   
+   if((index_courant==40 || bouton=='X')&& index_courant>0) {
+         for(int i=0; i<index_courant;i++) {
+             Serial.write(commandes[i]);
+         }
+         Serial.write(13);
+         affiche_execution_commande(0);
+         while(sortie==0){
+            if(Serial.available() > 0) {
+              avancee = Serial.read(); 
+              if(avancee=='+'){
+                 affiche_execution_commande(index); 
+                 index++;                 
+              } else if (avancee=='F'){
+                 index=0;
+                 sortie=1;
+              }
+            }
+         }
+      sortie=0; 
+      delay(3000);
+      raz_affichage_execution();  
+      
+      return;
+   }
+    
+   if(bouton=='Z'&& index_courant>0) {
+     //commandes[index_courant-1]='\0'; 
+     //affiche_commande_suivante(index_courant-1,' ');
+     //index_courant--;
+     for(int i=0; i<41;i++) {
+         commandes[i]='\0';
+     }  
+     raz_affichage();
+     index_courant=0;
+     return;
+   }
+
+   if(index_courant!=40 && bouton!='Z' && bouton!='X') {
+     commandes[index_courant]=bouton; 
+     affiche_commande_suivante(index_courant,bouton);
+     index_courant++;
+     return;
+   }         
+}
+
+
+
+void affiche_commande_suivante(int niveau, char bouton) {
+  lcd.setCursor(niveau, 0);
+  lcd.print(bouton);  
+}
+
+void affiche_execution_commande(int niveau) {
+  lcd.setCursor(niveau, 1);
+  lcd.print((char)255);  
+}
+
+void raz_affichage() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+}
+
+void raz_affichage_execution() {
+  lcd.setCursor(0, 1);
+  lcd.print(F("                                        ")); 
+}
