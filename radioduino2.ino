@@ -43,6 +43,32 @@
                                  SPI_MISO DABSHIELD
                                  SPI_SCK  DABSHIELD
  
+ map mémoire:
+ 
+address_offset=1;
+address_fm1=2;
+address_fm2=3;
+address_dabmode=4;
+address_mutliplex=5;
+address_servicestation=6;
+address_nbr_mltplx_dernierscan=7;
+address_multiplex1=8;
+address_multiplex2=9;
+address_multiplex3=10;
+address_multiplex4=11;
+address_multiplex5=12;
+address_multiplex6=13;
+address_multiplex7=14;
+address_multiplex8=15;
+address_multiplex9=16;
+address_multiplex10=17;
+
+adress_nommultplex1= 20
+adress_nommultplex2= 36
+adress_nommultplex3= 52
+
+adress_nommultplexX= 20+(X-1)*16;
+
  
  */
 
@@ -75,21 +101,28 @@ int dabmode = 1;
 DABTime dabtime;
 uint8_t vol = 63;
 uint8_t service = 0;
-uint8_t freq = 0;
-
+uint8_t srv = 0;
+uint8_t multiplex=0;
+uint8_t servicestation=0;
+uint16_t freqfm=0;
+uint8_t listmultiplex[32];
+char nomsmultiplex[32][17];
+int nbrmultiplexdispo=0;
 
 //init des variables de stockage des infos station, radiotext,heure et heure  courante
 byte rxindex = 0;
 char page_defaut[10];
 char rxdata[32];
-char ps_fm[10];
-char rt_fm[72];
+char ps_fm[32];
+char rt_fm[128];
 char date_fm[11];
 char heure_fm[6];
-char ps_fm_courant[10];
-char rt_fm_courant[72];
+char ps_fm_courant[32];
+int num_ps=0;
+char rt_fm_courant[128];
 char date_fm_courant[11];
 char heure_fm_courant[6];
+
 
 //init des variables  
 int heure_offset=0;
@@ -99,6 +132,22 @@ int address_offset=1;
 int address_fm1=2;
 int address_fm2=3;
 int address_dabmode=4;
+int address_mutliplex=5;
+int address_servicestation=6;
+int address_nbr_mltplx_dernierscan=7;
+int address_multiplex1=8;
+int address_multiplex2=9;
+int address_multiplex3=10;
+int address_multiplex4=11;
+int address_multiplex5=12;
+int address_multiplex6=13;
+int address_multiplex7=14;
+int address_multiplex8=15;
+int address_multiplex9=16;
+int address_multiplex10=17;
+
+//buffer lecteur chaine en eeprom:
+char buff_lit_eeprom[17];
 
 //init des variables pour l'encodeur rotatif
 int pos = 4;
@@ -121,6 +170,9 @@ int BUZZER = 10;
 int BPEH = 6;
 
 int t6=1;
+
+//init variable mode dab (station ou multiplex) station (0) ou multiplex(1)
+int modedab=0;
 
 
 
@@ -181,10 +233,12 @@ void setup() {
   sprintf(rt_fm,"%s","");
   sprintf(date_fm,"%s","00/00/0000");
   sprintf(heure_fm,"%02d:%02d",0+heure_offset, 0);
+  //sprintf(heure_fm,"%s","--:--");
   sprintf(ps_fm_courant,"%s","");
   sprintf(rt_fm_courant,"%s","");
   sprintf(date_fm_courant,"%s","00/00/0000");
   sprintf(heure_fm_courant,"%02d:%02d",0+heure_offset, 0);
+  //sprintf(heure_fm_courant,"%s","--:--");
 
   //demarrage du bus SPI pour le tuner FM/DAB+ dabshield
   pinMode(slaveSelectPin, OUTPUT);
@@ -201,7 +255,7 @@ void setup() {
   Serial.println(F("fm ou dab"));
   Serial.println(F("commandes: "));
   Serial.println(F("tune (fm: 8850-10800 dab: 0-37)"));
-  Serial.println(F("service : aff info text"));
+  Serial.println(F("service : dab changer de station"));
   Serial.println(F("volume 0-63"));
   Serial.println(F("info"));
   Serial.println(F("seek up ou down"));
@@ -226,27 +280,64 @@ void setup() {
 
   Dab.begin(dabmode);
   Dab.vol(0);
-  //EEPROM.write(address_fm1, 92);
-  //EEPROM.write(address_fm2, 60);
-  Serial.print("freq en eeprom: ");
-  Serial.print(EEPROM.read(address_fm1));
-  Serial.println(EEPROM.read(address_fm2));
-  Dab.tune((uint16_t)(EEPROM.read(address_fm1)*100+EEPROM.read(address_fm2)));
-  sprintf(ps_fm, "%d.%02d Mhz", (int)Dab.freq / 100, (int)((Dab.freq % 100)/10)*10);
-  sprintf(ps_fm_courant, "%d.%02d Mhz", (int)Dab.freq / 100, (int)((Dab.freq % 100)/10)*10);
-  myNex.writeStr("t0.txt", ps_fm);
-  Dab.vol(60);
+  
+
+  
+  Dab.vol(62);
 
   //reglege bidon date et heure
   setTime(12,0,0,1,1,2021);
 
+  //init FM
+  //EEPROM.write(address_fm1, 92);
+  //EEPROM.write(address_fm2, 60);
+  Serial.print("freq par defaut en eeprom: ");
+  freqfm=(uint16_t)(EEPROM.read(address_fm1)*100+EEPROM.read(address_fm2));
+  Serial.println(freqfm);
+
+
+  //init station DAB
+  //EEPROM.write(address_mutliplex, 15);
+  //EEPROM.write(address_servicestation, 1);
+  multiplex=EEPROM.read(address_mutliplex);
+  servicestation=EEPROM.read(address_servicestation);
+  Serial.print("multiplex et station par defaut en eeprom: ");
+  Serial.print(multiplex);Serial.print(",");
+  Serial.println(servicestation);
+
+
+  //init multiplex
+  //EEPROM.write(address_nbr_mltplx_dernierscan, 2);
+  //EEPROM.write(address_multiplex1, 15);
+  //EEPROM.write(address_multiplex2, 26);
+  //ecrit_chaine_eeprom(20,"amiens-local");
+  //ecrit_chaine_eeprom(36,"amiens-etendu");
+  nbrmultiplexdispo=EEPROM.read(address_nbr_mltplx_dernierscan);
+  Serial.print("nbr de multiplex en eeprom:");Serial.println(nbrmultiplexdispo);
+  for (int j=0; j< nbrmultiplexdispo;j++){
+    lit_chaine_eeprom(20+j*16);
+    sprintf(nomsmultiplex[j],"%s",buff_lit_eeprom);
+    Serial.print(nomsmultiplex[j]);
+    listmultiplex[j]=(uint8_t) EEPROM.read(8+j);
+    Serial.print("-");Serial.println(listmultiplex[j]);
+  }
+
+  
   if(dabmode == 0)
   {
     Serial.print(F("DAB>"));
+    Dab.set_service(servicestation);
+    Dab.tune(multiplex); 
+     
+
   }
   else
   {
     Serial.print(F("FM>"));
+    Dab.tune(freqfm);
+    sprintf(ps_fm, "%d.%02d Mhz", (int)Dab.freq / 100, (int)((Dab.freq % 100)/10)*10);
+    sprintf(ps_fm_courant, "%d.%02d Mhz", (int)Dab.freq / 100, (int)((Dab.freq % 100)/10)*10);
+    myNex.writeStr("t0.txt", ps_fm);
   }
  
   
@@ -256,69 +347,77 @@ void setup() {
 
 
 void loop() {
-  //taches recurentes pour le tuner, les alarms, l'update de la minuterie, l'etat de l'encoder, la maj de l'icone en focus sur l'afficheur, lecture de l'etat du bouton + action
-  Dab.task();
-  Alarm.delay(1);
-  update_minuterie(); 
-  encoder.tick();
-  check_encodeur();
-  focus_icone();
-  lecture_bouton();
-  set_heure_hiver_ete();
-
-  if (Serial.available() > 0)
-  {
-    rxdata[rxindex] = Serial.read();
-    if (rxdata[rxindex] == '\r')  //return
+    //taches recurentes pour le tuner, les alarms, l'update de la minuterie, l'etat de l'encoder, la maj de l'icone en focus sur l'afficheur, lecture de l'etat du bouton + action
+    Dab.task();
+    Alarm.delay(1);
+    update_minuterie(); 
+    encoder.tick();
+    check_encodeur();
+    focus_icone();
+    lecture_bouton();
+    set_heure_hiver_ete();
+  
+    if (Serial.available() > 0)
     {
-      Serial.print(F("\n"));
-      rxdata[rxindex] = '\0';
-
-      process_command(rxdata);
-      rxindex = 0;
-    }
-     else  //other char
-    {
-      Serial.print(rxdata[rxindex]);
-      rxindex++;
-      if (rxindex >= 32)
+      rxdata[rxindex] = Serial.read();
+      if (rxdata[rxindex] == '\r')  //return
       {
+        Serial.print(F("\n"));
+        rxdata[rxindex] = '\0';
+  
+        process_command(rxdata);
         rxindex = 0;
       }
+       else  //other char
+      {
+        Serial.print(rxdata[rxindex]);
+        rxindex++;
+        if (rxindex >= 32)
+        {
+          rxindex = 0;
+        }
+      }
     }
-  }
-  if(strcmp(ps_fm, ps_fm_courant) != 0)
-  {   
-    Serial.print("changement ps:");
-    Serial.println(ps_fm);
-    myNex.writeStr("t0.txt", ps_fm);
-    sprintf(ps_fm_courant,"%s",ps_fm);
-    if(t6==1){
-      myNex.writeStr("t6.txt", "  ");
-      t6=0;
+    
+    if(strcmp(ps_fm, ps_fm_courant) != 0)
+    { 
+      
+       Serial.print("changement ps:");
+       Serial.print("!");Serial.print(ps_fm);Serial.println("!");
+       if(page!=2){
+        myNex.writeStr("t0.txt", ps_fm);
+       }      
+       sprintf(ps_fm_courant,"%s",ps_fm);
+       if(t6==1){
+        myNex.writeStr("t6.txt", "  ");
+        t6=0;  
+       } 
     }
-  }
-  if(strcmp(rt_fm, rt_fm_courant) != 0)
-  {
-    Serial.print("changement rt:");
-    Serial.println(rt_fm);
-     myNex.writeStr("g0.txt", rt_fm);
-    sprintf(rt_fm_courant,"%s",rt_fm);
-  }
-  if(strcmp(date_fm, date_fm_courant) != 0)
-  {
-    Serial.print("changement date:");
-    Serial.println(date_fm);
-    sprintf(date_fm_courant,"%s",date_fm);
-  }
-  if(strcmp(heure_fm, heure_fm_courant) != 0)
-  {
-    Serial.print("changement heure:");
-    Serial.println(heure_fm);
-    myNex.writeStr("t6.txt", heure_fm);
-
-    sprintf(heure_fm_courant,"%s",heure_fm);
-  }
+    
+    if(strcmp(rt_fm, rt_fm_courant) != 0)
+    {
+      Serial.print("changement rt:");
+      Serial.print("!");Serial.print(rt_fm);Serial.println("!");
+      if(page!=2){
+        myNex.writeStr("g0.txt", rt_fm);
+      }       
+      sprintf(rt_fm_courant,"%s",rt_fm);
+    }
+    if(strcmp(date_fm, date_fm_courant) != 0)
+    {
+      Serial.print("changement date:");
+      Serial.println(date_fm);
+      sprintf(date_fm_courant,"%s",date_fm);
+    }
+    if(strcmp(heure_fm, heure_fm_courant) != 0)
+    {
+      Serial.print("changement heure:");
+      Serial.println(heure_fm);  
+      if(page!=2){
+        myNex.writeStr("t6.txt", heure_fm);
+      } 
+      sprintf(heure_fm_courant,"%s",heure_fm);
+    }
 }
 
 
@@ -326,29 +425,55 @@ void loop() {
 void check_encodeur(){
   newPos = encoder.getPosition();
   if (pos != newPos) {
+    Serial.println(newPos);
     if (page==0 && newPos==8) {
       encoder.setPosition(0);
       newPos=0;
+      
     }
     if (page==0 && newPos==-1) {
       newPos=7;
       encoder.setPosition(7);
+      
     }
     if (page==1 && newPos==8) {
       encoder.setPosition(0);
       newPos=0;
+      
     }
     if (page==1 && newPos==-1) {
       newPos=7;
       encoder.setPosition(7);
+      
     }
     if (page==2 && newPos==14) {
-      encoder.setPosition(0);
-      newPos=0;
+      encoder.setPosition(13);
+      newPos=13;
+      
     }
     if (page==2 && newPos==-1) {
+      newPos=0;
+      encoder.setPosition(0);
+      
+    }
+    if (page==2 && newPos> Dab.numberofservices-1 && newPos>pos && modedab==0 ) {
       newPos=13;
-      encoder.setPosition(13);
+      encoder.setPosition(13); 
+      
+       Serial.println("monte"); 
+    }
+    if (page==2 && newPos== 12 && newPos<pos && modedab==0) {
+       Serial.println("baisse"); 
+      newPos=Dab.numberofservices-1;
+      encoder.setPosition(Dab.numberofservices-1); 
+    }
+    if (page==2 && newPos> nbrmultiplexdispo-1 && newPos>pos && modedab==1 && newPos!=13 ) {
+      newPos=12;
+      encoder.setPosition(12);
+    }
+    if (page==2 && newPos==11 && newPos<pos && modedab==1 ) {
+      newPos=nbrmultiplexdispo-1;
+      encoder.setPosition(nbrmultiplexdispo-1);
     }
     Serial.println(newPos); 
     pos = newPos;
@@ -370,6 +495,11 @@ void lecture_bouton(){
 
 
 void analyse_bouton(){
+   int i=0;
+   char champtext[8];
+   char bufferint[3];
+   uint8_t freq_index=0;
+   uint8_t multiplex1=0;
    if (page==0) {
        switch (pos) {
             case 0:   
@@ -406,15 +536,26 @@ void analyse_bouton(){
               delay(200);
               myNex.writeNum("p9.pic", 15);
               myNex.writeStr("page 1");
+              myNex.writeNum("p9.pic", 15);
               if(minuterie_en_cours==1) {
                   myNex.writeNum("n0.val", minuterie_temps_restant); 
                   myNex.writeNum("n0.pco", 61923); 
                   myNex.writeNum("t1.pco", 61923); 
               }
-              page=1;
-              encoder.setPosition(2);
+              myNex.writeStr("t0.txt", "Init. DAB");
+              myNex.writeStr("t6.txt", "--:--");
               dabmode = 0;
-              Dab.begin(dabmode);              
+              Dab.begin(dabmode); 
+              Dab.tune(multiplex); 
+              delay(1000);
+              if(Dab.servicevalid() == true)
+              {
+                  Serial.println(Dab.Ensemble);
+                  Serial.println(Dab.service[servicestation].Label);
+                  Dab.set_service(servicestation);
+              }
+              encoder.setPosition(2);   
+              page=1;         
               break;   
             case 4:
               myNex.writeNum("p5.pic", 5);
@@ -455,12 +596,39 @@ void analyse_bouton(){
               myNex.writeNum("t1.pco", 36863);
               break;                                         
       }
+    return;
   }
   if (page==1) {
      switch (pos) {
             case 0: 
+              page=2;
+              modedab=0;
+              myNex.writeStr("page 2");
+              delay(200);
+              myNex.writeStr("t14.txt", "STATIONS");
+              myNex.writeStr("t13.txt", "retour");
+              myNex.writeNum("t0.pco", 63488);
+              for (i = 0; i < Dab.numberofservices; i++)
+              {
+                strcpy(champtext,"t");
+                sprintf(bufferint, "%d", i);
+                strcat(champtext, bufferint);
+                strcat(champtext, ".txt");
+                Serial.print(champtext);
+                Serial.print(" ");
+                Serial.println(Dab.service[i].Label);
+                myNex.writeStr(champtext, Dab.service[i].Label);
+              }
+              encoder.setPosition(0); 
             break; 
             case 1: 
+              myNex.writeNum("p8.pic", 14);
+              delay(300);
+              myNex.writeNum("p8.pic", 13);
+              Serial.println(multiplex);
+              Serial.println(servicestation);
+              EEPROM.write(address_mutliplex, (int)multiplex);
+              EEPROM.write(address_servicestation, (int)servicestation);
             break; 
             case 2: 
               myNex.writeNum("p9.pic", 16);
@@ -485,6 +653,31 @@ void analyse_bouton(){
               Dab.vol(55);          
             break; 
             case 3: 
+              page=2;
+              modedab=1;
+              myNex.writeStr("page 2");
+              delay(200);
+              myNex.writeStr("t14.txt", "bouquets");
+              myNex.writeStr("t13.txt", "retour");
+              myNex.writeStr("t12.txt", "nouv. scan");
+              myNex.writeNum("t0.pco", 63488);
+              encoder.setPosition(0); 
+              for (i=0; i< nbrmultiplexdispo;i++){
+                  Serial.print(nomsmultiplex[i]);
+                  strcpy(champtext,"t");
+                  sprintf(bufferint, "%d", i);
+                  strcat(champtext, bufferint);
+                  strcat(champtext, ".txt");
+                  Serial.print(champtext);
+                  Serial.print(" ");
+                  Serial.print("-");Serial.println(listmultiplex[i]);
+                  //if(listmultiplex[i]==multiplex){
+                  //  encoder.setPosition(i); 
+                  //}
+                  myNex.writeStr(champtext, nomsmultiplex[i]);
+              }
+
+
             break; 
            case 4:
               myNex.writeNum("p5.pic", 5);
@@ -525,7 +718,156 @@ void analyse_bouton(){
               myNex.writeNum("t1.pco", 36863);
               break;             
      }
+     return;
   }
+  if (page==2) {
+
+
+    if (pos<13){
+      if(modedab==0){  
+        servicestation=pos;           
+        myNex.writeStr("page 1");
+        myNex.writeNum("p9.pic", 16);
+        delay(200);
+        myNex.writeNum("p9.pic", 15);
+        page=1;
+        encoder.setPosition(2);  
+        if(minuterie_en_cours==1) {
+            myNex.writeNum("n0.val", minuterie_temps_restant); 
+            myNex.writeNum("n0.pco", 61923); 
+            myNex.writeNum("t1.pco", 61923); 
+        }
+        sprintf(ps_fm_courant,"%s","");
+        sprintf(rt_fm_courant,"%s","");
+        sprintf(heure_fm_courant,"%s","");
+        sprintf(date_fm_courant,"%s","");
+
+        Dab.set_service(servicestation); 
+        return;       
+      }else{
+        if(pos==12){ 
+            
+            reset_couleur_police(0,13); 
+            for (i = 0; i < nbrmultiplexdispo; i++)
+            {
+              strcpy(champtext,"t");
+              sprintf(bufferint, "%d", i);
+              strcat(champtext, bufferint);
+              strcat(champtext, ".txt");
+              myNex.writeStr(champtext, " ");
+            }
+            myNex.writeStr("t14.txt", "Patienter...");
+            myNex.writeStr("t13.txt", "retour");
+            myNex.writeStr("t12.txt", "nouv. scan");
+            myNex.writeNum("t0.pco", 63488);
+            encoder.setPosition(0);
+            i=0;
+            memset(listmultiplex,0,sizeof(listmultiplex));
+            for (freq_index = 0; freq_index < DAB_FREQS; freq_index++){
+              Dab.tune(freq_index);
+              if(Dab.servicevalid() == true)
+              {
+                strcpy(champtext,"t");
+                sprintf(bufferint, "%d", i);
+                strcat(champtext, bufferint);
+                strcat(champtext, ".txt");
+                Serial.print(champtext);
+                Serial.print("-");
+                Serial.print(20+i*16);
+                Serial.print("-");
+                Serial.print(Dab.Ensemble);
+                Serial.print("-");
+                Serial.println((int)freq_index);
+                myNex.writeStr(champtext, Dab.Ensemble);
+                ecrit_chaine_eeprom(20+i*16,Dab.Ensemble);
+                listmultiplex[i]=freq_index;
+                EEPROM.write(8+i, (int)freq_index);
+                nbrmultiplexdispo=i+1;
+                i++;
+              }
+            }  
+            EEPROM.write(address_nbr_mltplx_dernierscan, nbrmultiplexdispo);  
+            myNex.writeStr("t14.txt", "bouquets");    
+        }
+        if(pos < nbrmultiplexdispo+1 ){  
+            modedab=0;
+            myNex.writeStr("page 2");
+            page=2;  
+            myNex.writeStr("t14.txt", "Patienter...");
+            myNex.writeStr("t13.txt", "retour");
+            myNex.writeNum("t0.pco", 63488);
+            encoder.setPosition(0); 
+            multiplex1=listmultiplex[pos];
+            //if(multiplex1!=multiplex){
+              Dab.tune(multiplex1);
+            //}
+            
+            for (i = 0; i < Dab.numberofservices; i++)
+            {
+              strcpy(champtext,"t");
+              sprintf(bufferint, "%d", i);
+              strcat(champtext, bufferint);
+              strcat(champtext, ".txt");
+              Serial.print(champtext);
+              Serial.print(" ");
+              Serial.println(Dab.service[i].Label);
+              myNex.writeStr(champtext, Dab.service[i].Label);
+              
+            }
+            myNex.writeStr("t14.txt", "STATIONS");
+        }
+
+        return;      
+      }
+      
+    }else if (pos==13){
+      if(modedab==0){  
+        myNex.writeStr("page 1");
+        myNex.writeNum("p9.pic", 16);
+        delay(200);
+        sprintf(ps_fm_courant,"%s","");
+        sprintf(rt_fm_courant,"%s","");
+        sprintf(heure_fm_courant,"%s","");
+        sprintf(date_fm_courant,"%s","");
+        page=1;
+        encoder.setPosition(2); 
+        if(minuterie_en_cours==1) {
+            myNex.writeNum("n0.val", minuterie_temps_restant); 
+            myNex.writeNum("n0.pco", 61923); 
+            myNex.writeNum("t1.pco", 61923); 
+        }         
+        return;       
+      }else{
+        modedab=0;
+        myNex.writeStr("page 2");
+        page=2;
+        delay(200);
+        myNex.writeStr("t14.txt", "stations");
+        myNex.writeStr("t13.txt", "retour");
+        myNex.writeNum("t0.pco", 63488);
+        encoder.setPosition(0); 
+
+        Dab.tune(multiplex);
+        delay(800);
+        for (i = 0; i < Dab.numberofservices; i++)
+        {
+          strcpy(champtext,"t");
+          sprintf(bufferint, "%d", i);
+          strcat(champtext, bufferint);
+          strcat(champtext, ".txt");
+          Serial.print(champtext);
+          Serial.print(" ");
+          Serial.println(Dab.service[i].Label);
+          myNex.writeStr(champtext, Dab.service[i].Label);
+        }
+        return;       
+      }      
+    }
+       
+       return;
+  }
+
+
 }
 
 
@@ -637,9 +979,126 @@ void focus_icone(){
               break;                                                                                
           }
       }
+      if (page==2) {
+          if (modedab==0 && pos== Dab.numberofservices-1){
+                reset_couleur_police(Dab.numberofservices,13);              
+          } 
+          if (modedab==1 && pos==nbrmultiplexdispo-1){
+                reset_couleur_police(nbrmultiplexdispo,13);              
+          } 
+          switch (pos) {
+            case 0:
+              myNex.writeNum("t13.pco", 36863);
+              myNex.writeNum("t0.pco", 63488);
+              myNex.writeNum("t1.pco", 36863);
+              Serial.println("ok");
+              break;            
+            case 1:
+              myNex.writeNum("t0.pco", 36863);
+              myNex.writeNum("t1.pco", 63488);
+              myNex.writeNum("t2.pco", 36863);
+              Serial.println("ok");
+              break;
+            case 2:
+              myNex.writeNum("t1.pco", 36863);
+              myNex.writeNum("t2.pco", 63488);
+              myNex.writeNum("t3.pco", 36863);
+              Serial.println("ok");
+              break;
+            case 3:
+              myNex.writeNum("t2.pco", 36863);
+              myNex.writeNum("t3.pco", 63488);
+              myNex.writeNum("t4.pco", 36863);
+              Serial.println("ok");
+              break;
+             case 4:
+              myNex.writeNum("t3.pco", 36863);
+              myNex.writeNum("t4.pco", 63488);
+              myNex.writeNum("t5.pco", 36863);
+              Serial.println("ok");
+              break;
+            case 5:
+              myNex.writeNum("t4.pco", 36863);
+              myNex.writeNum("t5.pco", 63488);
+              myNex.writeNum("t6.pco", 36863);
+              Serial.println("ok");
+              break;
+            case 6:
+              myNex.writeNum("t5.pco", 36863);
+              myNex.writeNum("t6.pco", 63488);
+              myNex.writeNum("t7.pco", 36863);
+              Serial.println("ok");
+              break;
+            case 7:
+              myNex.writeNum("t6.pco", 36863);
+              myNex.writeNum("t7.pco", 63488);
+              myNex.writeNum("t8.pco", 36863);
+              Serial.println("ok");
+              break;    
+            case 8:
+              myNex.writeNum("t7.pco", 36863);
+              myNex.writeNum("t8.pco", 63488);
+              myNex.writeNum("t9.pco", 36863);
+              Serial.println("ok");
+              break;  
+            case 9:
+              myNex.writeNum("t8.pco", 36863);
+              myNex.writeNum("t9.pco", 63488);
+              myNex.writeNum("t10.pco", 36863);
+              Serial.println("ok");
+              break;   
+            case 10:
+              myNex.writeNum("t9.pco", 36863);
+              myNex.writeNum("t10.pco", 63488);
+              myNex.writeNum("t11.pco", 36863);
+              Serial.println("ok");
+              break;       
+            case 11:
+              myNex.writeNum("t10.pco", 36863);
+              myNex.writeNum("t11.pco", 63488);
+              myNex.writeNum("t12.pco", 36863);
+              Serial.println("ok");
+              break;   
+            case 12:
+              reset_couleur_police(nbrmultiplexdispo-1,13);              
+              myNex.writeNum("t12.pco", 63488);
+              myNex.writeNum("t13.pco", 36863);
+              Serial.println("ok");
+              break; 
+            case 13:
+             if (modedab==0 ){
+                reset_couleur_police(Dab.numberofservices-1,13);              
+             } 
+             if (modedab==1 ){
+                reset_couleur_police(nbrmultiplexdispo,13);              
+             } 
+             myNex.writeNum("t13.pco", 63488);
+             Serial.println("ok");
+             break;                                                                          
+          }
+      }
    }
   change_pos=0;
 }
+
+
+
+void reset_couleur_police(int debut,int fin){
+   char champtext[8];
+   char bufferint[3];
+   for (int i = debut; i < fin+1; i++){
+          //Serial.print(i);  
+          //Serial.print(" "); 
+          strcpy(champtext,"t");
+          sprintf(bufferint, "%d", i);
+          strcat(champtext, bufferint);
+          strcat(champtext, ".pco");
+          //Serial.println(champtext);
+          myNex.writeNum(champtext, 36863);
+    }
+  
+}
+
 
 
 
@@ -649,11 +1108,16 @@ void ServiceData(void)
   Serial.println("appel callback");
   if (dabmode == 0)
   {
-    sprintf(ps_fm,"%s",Dab.service[service].Label);
+    sprintf(ps_fm,"%s",Dab.service[servicestation].Label);
     sprintf(rt_fm,"%s",Dab.ServiceData);   
     Dab.time(&dabtime);    
     sprintf(date_fm,"%02d/%02d/%04d",  dabtime.Days,dabtime.Months,dabtime.Year);
     sprintf(heure_fm,"%02d:%02d",dabtime.Hours,dabtime.Minutes);
+    //Serial.println(Dab.service[servicestation].CompID); 
+    //Serial.print("!");Serial.print(ps_fm);Serial.println("!");
+    //Serial.print("!");Serial.print(rt_fm);Serial.println("!");
+    //Serial.println(date_fm);
+    //Serial.println(heure_fm);
   }
   else
   {
@@ -661,17 +1125,18 @@ void ServiceData(void)
     sprintf(rt_fm,"%s",Dab.ServiceData);
     sprintf(date_fm,"%02d/%02d/%04d", Dab.Days, Dab.Months, Dab.Year);
     sprintf(heure_fm,"%02d:%02d",Dab.Hours+heure_offset, Dab.Minutes);
+    char freqstring[32];
+    Dab.status();
+    sprintf(freqstring, "Freq = %3d.", (uint16_t)Dab.freq / 100);
+    Serial.print(freqstring);
+    sprintf(freqstring, "%1d MHz : ", (uint16_t)(Dab.freq % 100)/10);
+    Serial.print(freqstring);   
+    sprintf(freqstring,"RSSI = %d, ",Dab.signalstrength);
+    Serial.print(freqstring);
+    sprintf(freqstring,"SNR = %d\n",Dab.snr);
+    Serial.print(freqstring);  
   }
-  char freqstring[32];
-  Dab.status();
-  sprintf(freqstring, "Freq = %3d.", (uint16_t)Dab.freq / 100);
-  Serial.print(freqstring);
-  sprintf(freqstring, "%1d MHz : ", (uint16_t)(Dab.freq % 100)/10);
-  Serial.print(freqstring);   
-  sprintf(freqstring,"RSSI = %d, ",Dab.signalstrength);
-  Serial.print(freqstring);
-  sprintf(freqstring,"SNR = %d\n",Dab.snr);
-  Serial.print(freqstring);  
+  
 }
 
 
@@ -894,6 +1359,26 @@ void minuterie_beep(){
  }  
 
 
+void ecrit_chaine_eeprom(int nbr, char* chaine){
+  int i=0;
+  for (i = 0; i < strlen(chaine)+1; i++){
+    EEPROM.write(nbr+i, chaine[i]);    
+  }  
+}
+
+
+void lit_chaine_eeprom(int nbr){
+  int i=0;
+  for (i = 0; i < 16; i++){
+   buff_lit_eeprom[i]=(char)EEPROM.read(nbr+i);
+   if (buff_lit_eeprom[i]=='\0'){
+    return;
+   }
+  } 
+}
+
+
+
 
 void process_command(char *command)
 {
@@ -904,9 +1389,10 @@ void process_command(char *command)
     cmd = strtok(NULL, " \r");
     if(dabmode == 0)
     {
-      freq = (int)strtol(cmd, NULL, 10);
+      srv = (int)strtol(cmd, NULL, 10);
       service = 0;
-      Dab.tune(freq);
+      multiplex=srv;
+      Dab.tune(srv);
       Ensemble_Info();
     }
     else
@@ -933,6 +1419,7 @@ void process_command(char *command)
     cmd = strtok(NULL, " \r");
     service = (uint8_t)strtol(cmd, NULL, 10);
     Dab.set_service(service);
+    servicestation=service;
     Serial.print(Dab.service[service].Label);
     Serial.print(F("\n"));
   }
@@ -1042,12 +1529,14 @@ void Ensemble_Info(void)
   Serial.print(Dab.Ensemble);
   Serial.print(F("\n"));
   Serial.print(F("\nServices: \n"));
-  Serial.print(F("ID\tName\n\n"));
+  Serial.print(F("ID\tName\tcompid\n\n"));
   for (i = 0; i < Dab.numberofservices; i++)
   {
     Serial.print(i);
     Serial.print(F(":\t"));
     Serial.print(Dab.service[i].Label);
+    Serial.print(F(":\t"));
+    Serial.print(Dab.service[i].CompID);
     Serial.print(F("\n"));
   }
   Serial.print(F("\n"));
