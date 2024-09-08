@@ -90,11 +90,9 @@ const uint32_t CODE_IR_[10] = {0x807f807f,0x807f728d,0x807fb04f,0x807f30cf,0x807
 #define ROTARY_ENCODER_A_PIN 42
 #define ROTARY_ENCODER_B_PIN 41
 #define ROTARY_ENCODER_BUTTON_PIN 40
-#define ROTARY_ENCODER_VCC_PIN -1 //-1 = vcc directemetns ur 3.3v
+#define ROTARY_ENCODER_VCC_PIN -1 //-1 = vcc directement sur 3.3v
 #define ROTARY_ENCODER_STEPS 4
-//depending on your encoder - try 1,2 or 4 to get expected behaviour
-//#define ROTARY_ENCODER_STEPS 1
-//#define ROTARY_ENCODER_STEPS 2
+
 
 AiEsp32RotaryEncoder rotaryEncoder = AiEsp32RotaryEncoder(ROTARY_ENCODER_A_PIN, ROTARY_ENCODER_B_PIN, ROTARY_ENCODER_BUTTON_PIN, ROTARY_ENCODER_VCC_PIN, ROTARY_ENCODER_STEPS);
 Audio audio;
