@@ -10,9 +10,9 @@ Webradio:
 - affichieur VFD 256x50 pixels (GP1287AI)
 - telecommande infrarouge et/ou encodeur rotatif pour changer preselection ou gerer le volume
 - vumetre
-- 10 preselections paramétrables par serveur web
-- SSID et PASSWD paramétrables par serveur web
-- Si SSID non-joignable le webradio boot en mode AP (ssid: webradio) avec les sefgveru web actif
+- 10 preselections paramétrables via serveur web
+- SSID et PASSWD paramétrables via serveur web
+- Si SSID non-joignable la webradio boot en mode AP (ssid: webradio) avec le serveur web actif
 
 
 
