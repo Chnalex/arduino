@@ -201,9 +201,9 @@ void setup(){
     audio.setVolume(volume_courant); // default 0...21
     audio.setConnectionTimeout(timeout_ms, timeout_ms_ssl);
 
-    WiFi.mode(WIFI_STA); //Optional
+    WiFi.mode(WIFI_STA); 
     WiFi.begin(preferences.getString("ssid", "").c_str(), preferences.getString("password", "").c_str());
-    Serial.print("\nConnecting: ");
+    Serial.print("\nConnexion: ");
     Serial.print(preferences.getString("ssid", "").c_str());
     Serial.print(" -> ");
     Serial.println(preferences.getString("password", "").c_str());
